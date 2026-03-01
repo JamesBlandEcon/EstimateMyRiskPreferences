@@ -2,24 +2,29 @@ version<-"0.0.1"
 
 library(shiny)
 library(tidyverse)
+library(rstan) 
+#options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
 
 
 
 probs<-"data/HN2016.csv" |>
   read.csv() |>
-  dplyr::arrange(rnorm(dplyr::n())) |>
-  dplyr::mutate(t = 1:dplyr::n()) |>
-  tidyr::pivot_longer(
+  arrange(rnorm(n())) |>
+  mutate(t = 1:n()) |>
+  pivot_longer(
     cols  = prob1L:prob3R,
     names_to = "name",
     values_to = "prob"
   ) |>
-  dplyr::mutate(
+  mutate(
     lottery = ifelse(grepl("L",name),"Left","Right"),
-    prize = name |> readr::parse_number()
-  ) |>
-  as.data.frame() 
+    prize = name |> parse_number()
+  )
 
+
+model<-"EUT_CARA.stan" |>
+  stan_model()
 
 #-------------------------------------------------------------------------------
 # User interface
@@ -38,8 +43,6 @@ ui<- fluidPage(
 server <- function(input, output) {
   
   page <- reactiveVal("start")
-  
-  
   
   output$page <- renderUI({
     if (page()=="start"){
@@ -61,9 +64,6 @@ server <- function(input, output) {
       )
       
     } else if (page() == "elicitation") {
-      
-      prizes<-c(input$worst,0.5*(input$worst+input$best),input$best ) 
-      
       tagList(
         h1("Estimating your risk preferences"),
         p(paste0("Version ",version)),
@@ -158,14 +158,11 @@ server <- function(input, output) {
         
         local_i <- i  # capture i in a new scope — this is the critical part
         output[[paste0("plot_", local_i)]] <- renderPlot({
-          
-          
-          d<-probs |> 
-            dplyr::filter(t==local_i) 
-          
-          d$prize_txt <- paste0("$",prizes)[d$prize]
+          # your plotting code using local_i as the index
           (
-            ggplot(data=d
+            ggplot(probs |> 
+                     filter(t==local_i) |>
+                     mutate(prize_txt = paste0("$",prizes)[prize])
                    , aes(y=prob, x=prize_txt))
             +geom_bar(stat="identity")
             +geom_text(aes(y = prob+0.05, label = paste0(round(prob*100),"%")))
@@ -224,11 +221,11 @@ server <- function(input, output) {
         if (is.null(val)) NA else val
       })
     ) |>
-      dplyr::full_join(
-        probs |> tidyr::pivot_wider(id_cols = t, names_from = name, values_from = prob),
+      full_join(
+        probs |> pivot_wider(id_cols = t, names_from = name, values_from = prob),
         by = "t"
       ) |>
-      dplyr::mutate(
+      mutate(
         prize1 = input$worst,
         prize2 = 0.5*(input$best+input$worst),
         prize3 = input$best
@@ -240,75 +237,27 @@ server <- function(input, output) {
     
     d<-"choice_data.csv" |>
       read.csv() |>
-      dplyr::filter(!is.na(answer))
+      filter(!is.na(answer))
     
-    # sampling starts here
+    dStan<-list(
+      N = dim(d)[1],
+      choiceR = 1*(d$answer=="Right lottery"),
+      prizes = d |> select(prize1:prize3),
+      probL = d |> select(prob1L:prob3L),
+      probR = d |> select(prob1R:prob3R)
+    )
     
     
-
-      choiceR <- (d$answer=="Right lottery")
-      prizes <- d |> dplyr::select(prize1:prize3) |> as.matrix()
-      probL <- d |> dplyr::select(prob1L:prob3L) |> as.matrix()
-      probR <- d |> dplyr::select(prob1R:prob3R) |> as.matrix()
-      
-      dprob<-probR-probL
-      
-      target<-function(x) {
-        
-        r<-x[1]
-        lambda <-exp(x[2])
-        
-        U<-(1-exp(-r*prizes))/r
-        
-        lDU<-lambda*(dprob*U)%*%c(1,1,1)
-        
-        result<- (-sum(log(1+exp(-lDU[choiceR])))
-                  -sum(log(1+exp(+lDU[!choiceR])))
-                  +log(dnorm(x[1]))+log(dnorm(x[2]))
+    
+    Fit<-model |>
+      sampling(
+        data = dStan,
+        iter=5000
         )
-        
-        return(result)
-        
-      }
-      
-      x0<-c(0.1,0)
-      
-      t0<-target(x0)
-      
-      X<-c()
-      
-      for (ss in 1:10000) {
-        
-        prop<-x0+rnorm(2,sd=0.1)
-        
-        tp<-target(prop)
-        
-        accept<-log(runif(1))<(tp-t0)
-        
-        if (accept) {
-          x0<-prop
-          t0<-tp
-          
-          if (ss>1000) {
-              X<-rbind(X, prop)
-          }
-        }
-        
-        
-      }
-      
-      X[,2]<-exp(X[,2])
-      
-      
-      
-      
-      colnames(X)<-c("r","lambda")
     
-    X |>
+    Fit |>
+      as.data.frame() |>
       write.csv("Fit.csv")
-    
-    
-    
     
     page("end")
     
