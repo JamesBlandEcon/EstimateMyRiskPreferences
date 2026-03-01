@@ -5,7 +5,7 @@ account: jamesblandecon
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16788631
-bundleId: 11646098
+bundleId: 11646323
 url: https://jamesblandecon.shinyapps.io/RiskApp/
 version: 1
 asMultiple: FALSE

@@ -1,4 +1,4 @@
-version<-"0.0.1"
+version<-"0.0.2"
 
 library(shiny)
 library(tidyverse)
@@ -101,9 +101,16 @@ server <- function(input, output) {
         p("First, let's take a look at our estimate of your constant absolute risk aversion (CARA) coefficient. 
           This measures how risk averse you are. If it's positive you're risk averse, and if it's negative you're risk loving
           "),
-        mainPanel(
-          plotOutput("CARA_posterior")
-        ),
+          plotOutput("CARA_posterior"),
+        br(),
+        h3("Certainty equivalent"),
+        p("But what does this mean? One way of describing risk preferences is with a 'certainty equivalent'
+          of a reference lottery. This is the certain amount that makes you indifferent between the certain amount
+          and the reference lottery. Here we will use a 50/50 chance of getting the lowest or highest prize
+          as the reference lottery
+          "),
+          plotOutput("certainty_equivalent"),
+        br(),
         h3("A bit about this app"),
         p("The probability distributions for the lotteries were taken from the following economic experiment:"),
         p('Harrison, Glenn W., and Jia Min Ng. "Evaluating the expected welfare gain from insurance." Journal of Risk and Insurance 83, no. 1 (2016): 91-120.'),
@@ -123,6 +130,30 @@ server <- function(input, output) {
       ggplot(posterior, aes(x=r))
       +geom_density()
       +theme_bw()
+    )
+    
+  })
+  
+  output$certainty_equivalent<-renderPlot({
+    
+    posterior<-"Fit.csv" |> 
+      read.csv() |>
+      mutate(
+        EU = 0.5*(1-exp(-r*input$worst))/r+0.5*(1-exp(-r*input$best))/r,
+        
+        # EU*r = 1-exp(-rC)
+        # exp(-rC) = 1-EU*r
+        # -rC = log(1-EU*r)
+        # c = -log(1-EU*r)/r
+        
+        CE = -log(1-EU*r)/r
+        )
+    
+    (
+      ggplot(posterior, aes(x=CE))
+      +geom_density()
+      +theme_bw()
+      +xlab("Certainty equivalent ($)")
     )
     
   })
