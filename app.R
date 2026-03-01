@@ -1,4 +1,4 @@
-version<-"0.0.2"
+version<-"0.0.3"
 
 library(shiny)
 library(tidyverse)
@@ -110,6 +110,12 @@ server <- function(input, output) {
           as the reference lottery
           "),
           plotOutput("certainty_equivalent"),
+        
+        br(),
+        h3("Accessing your data"),
+        p("Click on the following links to download your data and posterior distribution"),
+        downloadButton("download_data", "Download choice data"),
+        downloadButton("download_posterior", "Download posterior distribution"),
         br(),
         h3("A bit about this app"),
         p("The probability distributions for the lotteries were taken from the following economic experiment:"),
@@ -120,6 +126,47 @@ server <- function(input, output) {
       )
     }
   })
+  
+  output$download_data <- downloadHandler(
+    
+    
+    
+    filename = function() {
+      paste0("choice_data_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      d<-"choice_data.csv" |>
+        read.csv() |>
+        dplyr::filter(!is.na(answer))
+      
+      d |> write.csv(file, row.names = FALSE)
+    }
+  )
+  
+  output$download_posterior<- downloadHandler(
+    
+    
+    
+    filename = function() {
+      paste0("posterior_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      d<-"Fit.csv" |>
+        read.csv() |>
+        mutate(
+          EU = 0.5*(1-exp(-r*input$worst))/r+0.5*(1-exp(-r*input$best))/r,
+          
+          # EU*r = 1-exp(-rC)
+          # exp(-rC) = 1-EU*r
+          # -rC = log(1-EU*r)
+          # c = -log(1-EU*r)/r
+          
+          CE = -log(1-EU*r)/r
+        )
+      
+      d |> write.csv(file, row.names = FALSE)
+    }
+  )
   
   
   output$CARA_posterior<-renderPlot({
